@@ -2,12 +2,12 @@
 extern crate cimvr_engine_interface;
 
 use cimvr_common::{
-    desktop::{InputEvent, InputEvents, KeyboardEvent},
+    desktop::{ElementState, InputEvent, KeyCode, KeyboardEvent},
     glam::Vec3,
     render::{Mesh, MeshHandle, UploadMesh, Vertex},
     Transform,
 };
-use cimvr_derive_macros::ComponentDerive;
+use cimvr_derive_macros::Component;
 use cimvr_engine_interface::FrameTime;
 pub use cimvr_engine_interface::{
     prelude::{UserState as PluginEntry, *},
@@ -51,8 +51,11 @@ const CUBE_HANDLE: MeshHandle = MeshHandle::new(pkg_namespace!("Cube"));
 #[derive(Serialize, Deserialize)]
 struct TransRemote(Transform);
 
-#[derive(ComponentDerive, Serialize, Deserialize, Default, Copy, Clone)]
+#[derive(Component, Serialize, Deserialize, Default, Copy, Clone)]
 struct Scale(Vec3);
+
+#[derive(Component, Serialize, Deserialize, Default, Copy, Clone)]
+struct Player;
 
 impl PluginEntry for ClientState {
     fn new(io: &mut EngineIo, sched: &mut EngineSchedule<Self>) -> Self {
@@ -63,41 +66,58 @@ impl PluginEntry for ClientState {
         // This makes it so our ClientState update function is called with the ability to receive these events.
         // SystemDescriptor seems to be a System Manager of some sort.
         let system_desc = SystemDescriptor::new(Stage::Update)
-            .subscribe::<InputEvents>() // Subscribe to input events
-            .subscribe::<FrameTime>(); // Subscribe to frame time for delta time
+            .subscribe::<InputEvent>() // Subscribe to input events
+            .subscribe::<FrameTime>()
+            .query::<Player>(Access::Read)
+            .query::<Transform>(Access::Write); // Subscribe to frame time for delta time
+
         sched.add_system(ClientState::update, system_desc); // Add the system to the schedule
 
         // Add the transform component to the cube mesh
-        let cube_entity = io.create_entity();
+        let character = io.create_entity();
         // Add the transform component to the cube mesh
-        io.add_component(cube_entity, &Transform::default());
-        io.add_component(cube_entity, &Scale::default());
+        io.add_component(character, &Transform::default());
+        io.add_component(character, &Scale::default());
+        io.add_component(character, &Player::default());
+
         Self
     }
 }
 
 impl ClientState {
     // Make it so that the client state is added as a system to the schedule
-    fn update(&mut self, io: &mut EngineIo, _query: &mut QueryResult) {
+    fn update(&mut self, io: &mut EngineIo, query: &mut QueryResult) {
         //
         // TODO: WASD translates to changing the transform
         // TODO: Send transform as message.
+        // _query.
         let frame_time = io.inbox_first::<FrameTime>().unwrap();
-        for item in io
-            .inbox::<InputEvents>()
-            .map(|event| {
-                event
-                    .keyboard_events()
-                    .cloned()
-                    .collect::<Vec<KeyboardEvent>>()
+        let character_entity = query.iter().next().unwrap(); //EntityID for character.
+        
+        for (key, state) in io.inbox::<InputEvent>().filter_map(|f| f.get_keyboard()) {
+            let is_pressed = state == ElementState::Pressed;
+            let mut local_transform = query.read::<Transform>(character_entity);
+            match key {
+                KeyCode::W => {
+                    if is_pressed {
+                        
+                    } else {
+                    }
+                },
+                KeyCode::A => {}
+                KeyCode::S => {}
+                KeyCode::D => {}
+                _ => {}
+            }
+            query.modify::<Transform>(character_entity, |transform| {
+                // transform.pos += Vec3::new(0.0, 0.0, 0.1) * frame_time.delta_seconds();
             })
-            .into_iter()
-        {}
+        }
     }
 }
 
 impl PluginEntry for ServerState {
-    // Implement a constructor
+    // Implement a constructor&Player::default());
     fn new(_io: &mut EngineIo, _sched: &mut EngineSchedule<Self>) -> Self {
         // let cube_entity = _io.create_entity();
 
