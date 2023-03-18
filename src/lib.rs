@@ -5,6 +5,7 @@ use cimvr_common::{
     desktop::{ElementState, InputEvent, KeyCode, KeyboardEvent},
     glam::Vec3,
     render::{Mesh, MeshHandle, UploadMesh, Vertex},
+    utils::input_helper::InputHelper,
     Transform,
 };
 use cimvr_derive_macros::Component;
@@ -16,7 +17,11 @@ pub use cimvr_engine_interface::{
 // use cimvr_engine_interface::{prelude::*};
 
 // All state associated with client-side behaviour
-struct ClientState;
+
+#[derive(Default)]
+struct ClientState {
+    input_helper: InputHelper,
+}
 
 // All state associated with server-side behaviour
 struct ServerState;
@@ -76,43 +81,31 @@ impl PluginEntry for ClientState {
         // Add the transform component to the cube mesh
         let character = io.create_entity();
         // Add the transform component to the cube mesh
-        io.add_component(character, &Transform::default());
-        io.add_component(character, &Scale::default());
-        io.add_component(character, &Player::default());
+        io.add_component(character, Transform::default());
+        io.add_component(character, Scale::default());
+        io.add_component(character, Player::default());
 
-        Self
+        Self::default() // This works cuz default is baller
     }
 }
 
 impl ClientState {
     // Make it so that the client state is added as a system to the schedule
     fn update(&mut self, io: &mut EngineIo, query: &mut QueryResult) {
-        //
+        self.input_helper.handle_input_events(io);
         // TODO: WASD translates to changing the transform
         // TODO: Send transform as message.
-        // _query.
         let frame_time = io.inbox_first::<FrameTime>().unwrap();
         let character_entity = query.iter().next().unwrap(); //EntityID for character.
-        
-        for (key, state) in io.inbox::<InputEvent>().filter_map(|f| f.get_keyboard()) {
-            let is_pressed = state == ElementState::Pressed;
-            let mut local_transform = query.read::<Transform>(character_entity);
-            match key {
-                KeyCode::W => {
-                    if is_pressed {
-                        
-                    } else {
-                    }
-                },
-                KeyCode::A => {}
-                KeyCode::S => {}
-                KeyCode::D => {}
-                _ => {}
-            }
-            query.modify::<Transform>(character_entity, |transform| {
-                // transform.pos += Vec3::new(0.0, 0.0, 0.1) * frame_time.delta_seconds();
-            })
-        }
+        let placeholder = todo!();
+        // frame_time.delta
+        // for (key, state) in io.inbox::<InputEvent>().filter_map(|f| f.get_keyboard()) {
+        //     let is_pressed = state == ElementState::Pressed;
+        //     let mut local_transform = query.read::<Transform>(character_entity);
+        //     query.modify::<Transform>(character_entity, |transform| {
+        //         // transform.pos += Vec3::new(0.0, 0.0, 0.1) * frame_time.delta_seconds();
+        //     })
+        // }
     }
 }
 
