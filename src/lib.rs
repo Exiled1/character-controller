@@ -4,7 +4,7 @@ extern crate cimvr_engine_interface;
 use cimvr_common::{
     desktop::{ElementState, InputEvent, KeyCode, KeyboardEvent},
     glam::Vec3,
-    render::{Mesh, MeshHandle, UploadMesh, Vertex},
+    render::{Mesh, MeshHandle, Render, UploadMesh, Vertex},
     utils::input_helper::InputHelper,
     Transform,
 };
@@ -64,7 +64,7 @@ struct Scale(Transform);
 struct Speed(f32);
 
 #[derive(Component, Serialize, Deserialize, Default, Copy, Clone)]
-struct Player;
+struct PlayerFlag;
 
 impl PluginEntry for ClientState {
     fn new(io: &mut EngineIo, sched: &mut EngineSchedule<Self>) -> Self {
@@ -77,9 +77,9 @@ impl PluginEntry for ClientState {
         let system_desc = SystemDescriptor::new(Stage::Update)
             .subscribe::<InputEvent>() // Subscribe to input events
             .subscribe::<FrameTime>()
-            .query::<Player>(Access::Read)
-            .query::<Transform>(Access::Write) // Subscribe to frame time for delta time
-            .query::<Speed>(Access::Write);
+            // .query::<Player>(Access::Read) // Just an experiment.
+            .query::<Transform>(Access::Read) // Subscribe to frame time for delta time
+            .query::<Speed>(Access::Read);
         sched.add_system(ClientState::update, system_desc); // Add the system to the schedule
 
         // Add the transform component to the cube mesh
@@ -87,7 +87,7 @@ impl PluginEntry for ClientState {
         // Add the transform component to the cube mesh
         io.add_component(character, Transform::default());
         io.add_component(character, Scale::default());
-        io.add_component(character, Player::default());
+        io.add_component(character, PlayerFlag::default());
         io.add_component(character, Speed(10.));
 
         Self::default() // This works cuz default is baller
@@ -146,14 +146,40 @@ impl ClientState {
 
 impl PluginEntry for ServerState {
     // Implement a constructor&Player::default());
-    fn new(_io: &mut EngineIo, _sched: &mut EngineSchedule<Self>) -> Self {
-        // let cube_entity = _io.create_entity();
+    fn new(io: &mut EngineIo, sched: &mut EngineSchedule<Self>) -> Self {
+        let cube_entity = io.create_entity();
+        // Define cube rendering.
+        io.add_component(
+            cube_entity,
+            Render::new(CUBE_HANDLE).primitive(cimvr_common::render::Primitive::Triangles),
+        );
+        io.add_component(cube_entity, Synchronized);
+        io.add_component(cube_entity, PlayerFlag);
 
+        // Make it so our server update receives the Transform and updates stuff with the character
+        // and transform component.
+        let descriptor = SystemDescriptor::new(Stage::Update)
+            .subscribe::<RemoteTrans>()
+            .query::<PlayerFlag>(Access::Write)
+            .query::<Transform>(Access::Write);
+
+        sched.add_system(Self::update, descriptor);
         log!("Hello, server!");
         Self
     }
 }
-
+impl ServerState {
+    fn update(&mut self, io: &mut EngineIo, query: &mut QueryResult) {
+        if let Some(RemoteTrans(trans)) = io.inbox_first() {
+            // Update the objects' transforms.
+            for item in query.iter() {
+                query.modify::<Transform>(item, |tf| {
+                    *tf = trans;
+                })
+            }
+        }
+    }
+}
 /// Defines the mesh data for a cube
 fn cube() -> UploadMesh {
     let size = 0.25;
