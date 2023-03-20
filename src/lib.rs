@@ -20,7 +20,7 @@ pub use cimvr_engine_interface::{
 
 #[derive(Default)]
 struct ClientState {
-    input_helper: InputHelper,
+    input: InputHelper,
 }
 
 // All state associated with server-side behaviour
@@ -59,6 +59,9 @@ struct TransRemote(Transform);
 #[derive(Component, Serialize, Deserialize, Default, Copy, Clone)]
 struct Scale(Vec3);
 
+#[derive(Component, Serialize, Deserialize, Default, Clone, Copy)]
+struct Speed(f32);
+
 #[derive(Component, Serialize, Deserialize, Default, Copy, Clone)]
 struct Player;
 
@@ -74,8 +77,8 @@ impl PluginEntry for ClientState {
             .subscribe::<InputEvent>() // Subscribe to input events
             .subscribe::<FrameTime>()
             .query::<Player>(Access::Read)
-            .query::<Transform>(Access::Write); // Subscribe to frame time for delta time
-
+            .query::<Transform>(Access::Write) // Subscribe to frame time for delta time
+            .query::<Speed>(Access::Write);
         sched.add_system(ClientState::update, system_desc); // Add the system to the schedule
 
         // Add the transform component to the cube mesh
@@ -84,6 +87,7 @@ impl PluginEntry for ClientState {
         io.add_component(character, Transform::default());
         io.add_component(character, Scale::default());
         io.add_component(character, Player::default());
+        io.add_component(character, Speed::default());
 
         Self::default() // This works cuz default is baller
     }
@@ -92,12 +96,59 @@ impl PluginEntry for ClientState {
 impl ClientState {
     // Make it so that the client state is added as a system to the schedule
     fn update(&mut self, io: &mut EngineIo, query: &mut QueryResult) {
-        self.input_helper.handle_input_events(io);
+        self.input.handle_input_events(io);
         // TODO: WASD translates to changing the transform
         // TODO: Send transform as message.
-        let frame_time = io.inbox_first::<FrameTime>().unwrap();
+        let frame_time = io.inbox_first::<FrameTime>().unwrap(); // Get frame time or bust.
         let character_entity = query.iter().next().unwrap(); //EntityID for character.
         let placeholder = todo!();
+        // Every frame the input helper is updated. So we should be good to just do wasd to
+        // transform changing.
+
+        let mut local_transform = query.read::<Transform>(character_entity);
+
+        // Now that we have the character entity's transform, we can just read WASD and change it
+        // based on the pressed key. We'll just use if statements since pattern matching won't help
+        // us if there's multiple keys pressed like W+A which is perfectly valid to go horizontally
+        if self.input.key_down(KeyCode::W) {
+            // Go forward.
+            todo!();
+        }
+
+        if self.input.key_down(KeyCode::A) {
+            // Go right.
+            todo!();
+        }
+
+        if self.input.key_down(KeyCode::S) {
+            // Go backwards.
+            todo!();
+        }
+
+        if self.input.key_down(KeyCode::D) {
+            // Go right.
+            todo!();
+        }
+
+        //         for (key, state) in io.inbox::<InputEvent>().filter_map(|f| f.get_keyboard()) {
+        //             let is_pressed = state == ElementState::Pressed;
+        //             let mut local_transform = query.read::<Transform>(character_entity);
+        //             match key {
+        //                 KeyCode::W => {
+        //                     if is_pressed {
+        //                     } else {
+        //                     }
+        //                 }
+        //                 KeyCode::A => {}
+        //                 KeyCode::S => {}
+        //                 KeyCode::D => {}
+        //                 _ => {}
+        //             }
+        //             query.modify::<Transform>(character_entity, |transform| {
+        //                 // transform.pos += Vec3::new(0.0, 0.0, 0.1) * frame_time.delta_seconds();
+        //             })
+        //         }
+
         // frame_time.delta
         // for (key, state) in io.inbox::<InputEvent>().filter_map(|f| f.get_keyboard()) {
         //     let is_pressed = state == ElementState::Pressed;
