@@ -53,11 +53,12 @@ const CUBE_HANDLE: MeshHandle = MeshHandle::new(pkg_namespace!("Cube"));
 //     };
 // }
 
-#[derive(Serialize, Deserialize)]
-struct TransRemote(Transform);
+#[derive(Message, Serialize, Deserialize)]
+#[locality("Remote")]
+struct RemoteTrans(Transform);
 
 #[derive(Component, Serialize, Deserialize, Default, Copy, Clone)]
-struct Scale(Vec3);
+struct Scale(Transform);
 
 #[derive(Component, Serialize, Deserialize, Default, Clone, Copy)]
 struct Speed(f32);
@@ -87,7 +88,7 @@ impl PluginEntry for ClientState {
         io.add_component(character, Transform::default());
         io.add_component(character, Scale::default());
         io.add_component(character, Player::default());
-        io.add_component(character, Speed::default());
+        io.add_component(character, Speed(10.));
 
         Self::default() // This works cuz default is baller
     }
@@ -100,63 +101,46 @@ impl ClientState {
         // TODO: WASD translates to changing the transform
         // TODO: Send transform as message.
         let frame_time = io.inbox_first::<FrameTime>().unwrap(); // Get frame time or bust.
-        let character_entity = query.iter().next().unwrap(); //EntityID for character.
-        let placeholder = todo!();
+                                                                 // EntityID for character.
+        let character_entity = query.iter().next().unwrap();
         // Every frame the input helper is updated. So we should be good to just do wasd to
         // transform changing.
-
+        let speed = query.read::<Speed>(character_entity);
         let mut local_transform = query.read::<Transform>(character_entity);
-
+        let mut move_vector = Vec3::ZERO;
+        const FORWARD: Vec3 = Vec3::new(1., 0., 0.);
+        const BACKWARD: Vec3 = Vec3::new(-1., 0., 0.);
+        const LEFT: Vec3 = Vec3::new(0., 0., -1.);
+        const RIGHT: Vec3 = Vec3::new(0., 0., 1.);
         // Now that we have the character entity's transform, we can just read WASD and change it
         // based on the pressed key. We'll just use if statements since pattern matching won't help
         // us if there's multiple keys pressed like W+A which is perfectly valid to go horizontally
         if self.input.key_down(KeyCode::W) {
             // Go forward.
-            todo!();
+            move_vector += FORWARD;
         }
-
         if self.input.key_down(KeyCode::A) {
-            // Go right.
-            todo!();
+            // Go left.
+            move_vector += LEFT;
         }
-
         if self.input.key_down(KeyCode::S) {
             // Go backwards.
-            todo!();
+            move_vector += BACKWARD;
         }
-
         if self.input.key_down(KeyCode::D) {
             // Go right.
-            todo!();
+            move_vector += RIGHT;
         }
 
-        //         for (key, state) in io.inbox::<InputEvent>().filter_map(|f| f.get_keyboard()) {
-        //             let is_pressed = state == ElementState::Pressed;
-        //             let mut local_transform = query.read::<Transform>(character_entity);
-        //             match key {
-        //                 KeyCode::W => {
-        //                     if is_pressed {
-        //                     } else {
-        //                     }
-        //                 }
-        //                 KeyCode::A => {}
-        //                 KeyCode::S => {}
-        //                 KeyCode::D => {}
-        //                 _ => {}
-        //             }
-        //             query.modify::<Transform>(character_entity, |transform| {
-        //                 // transform.pos += Vec3::new(0.0, 0.0, 0.1) * frame_time.delta_seconds();
-        //             })
-        //         }
-
-        // frame_time.delta
-        // for (key, state) in io.inbox::<InputEvent>().filter_map(|f| f.get_keyboard()) {
-        //     let is_pressed = state == ElementState::Pressed;
-        //     let mut local_transform = query.read::<Transform>(character_entity);
-        //     query.modify::<Transform>(character_entity, |transform| {
-        //         // transform.pos += Vec3::new(0.0, 0.0, 0.1) * frame_time.delta_seconds();
-        //     })
-        // }
+        // Now that we know by how much we want to move. Lets apply that to our local transform and
+        // send that to the server as a message. NOTE! We can also change this to work server side
+        // by making it so that instead of modifying a local transform and sending that, we can
+        // instead send our move vector as a message to the server. That would probably make better
+        // use of the sync component as well.
+        let distance_moved = move_vector.normalize() * frame_time.delta * speed.0;
+        local_transform.pos += distance_moved;
+        // Now we send our position over to the server
+        io.send(&RemoteTrans(local_transform))
     }
 }
 
