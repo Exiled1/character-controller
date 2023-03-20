@@ -73,29 +73,23 @@ impl PluginEntry for ClientState {
         io.add_component(character, Transform::default());
         // io.add_component(character, Scale::default());
         io.add_component(character, PlayerFlag::default());
-        // io.add_component(character, Speed(10.));
-        Self {
-            local_trans: Transform::identity(),
-            ..Default::default()
-        }
-        // Self::default() // This works cuz default is baller
+        Self::default() // Default is pretty sick.
     }
 }
 
 impl ClientState {
     // Make it so that the client state is added as a system to the schedule
-    fn update(&mut self, io: &mut EngineIo, _query: &mut QueryResult) {
+    fn update(&mut self, io: &mut EngineIo, query: &mut QueryResult) {
         self.input.handle_input_events(io);
         // TODO: WASD translates to changing the transform
         // TODO: Send transform as message.
         let frame_time = io.inbox_first::<FrameTime>().unwrap(); // Get frame time or bust.
 
         // EntityID for character.
-        // let character_entity = query.iter().next().unwrap();
+        let character_entity = query.iter().next().unwrap();
         // Every frame the input helper is updated. So we should be good to just do wasd to
         // transform changing.
         // let speed = query.read::<Speed>(character_entity);
-        // let mut local_transform = query.read::<Transform>(character_entity);
         let mut move_vector = Vec3::ZERO;
         const FORWARD: Vec3 = Vec3::new(1., 0., 0.);
         const BACKWARD: Vec3 = Vec3::new(-1., 0., 0.);
@@ -131,9 +125,13 @@ impl ClientState {
             let distance_moved = move_vector.normalize() * frame_time.delta * 10.;
             // log!("delta time: {:?}", frame_time.delta);
             // log!("Move vector: {:?}", distance_moved);
+            // query.modify::<Transform>(character_entity, |tr| {
+            //     tr.pos += distance_moved;
+            // });
             self.local_trans.pos += distance_moved;
             // log!("distance moved in client: {:?}", self.local_trans.pos);
             // Now we send our position over to the server
+            // let local_transform = query.read::<Transform>(character_entity);
             io.send(&RemoteTrans(self.local_trans))
         }
     }
