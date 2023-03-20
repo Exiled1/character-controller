@@ -2,7 +2,7 @@
 extern crate cimvr_engine_interface;
 
 use cimvr_common::{
-    desktop::{ElementState, InputEvent, KeyCode, KeyboardEvent},
+    desktop::{InputEvent, KeyCode},
     glam::Vec3,
     render::{Mesh, MeshHandle, Render, UploadMesh, Vertex},
     utils::input_helper::InputHelper,
@@ -18,9 +18,10 @@ pub use cimvr_engine_interface::{
 
 // All state associated with client-side behaviour
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct ClientState {
     input: InputHelper,
+    local_trans: Transform,
 }
 
 // All state associated with server-side behaviour
@@ -36,22 +37,6 @@ make_app_state!(ClientState, ServerState);
 // Calls new() for the appropriate state.
 // Step 1: Upload mesh data
 const CUBE_HANDLE: MeshHandle = MeshHandle::new(pkg_namespace!("Cube"));
-
-// #[derive(ComponentDerive, Serialize, Deserialize, Clone, Copy, Default)]
-// struct CharacterTransform3d {
-//     transform: Transform,
-//     scale: f32, // Maybe later: https://en.wikipedia.org/wiki/Scale_(geometry)
-// }
-
-// #[derive(Serialize, Deserialize)]
-// struct CharacterTransform3dRemote(CharacterTransform3d);
-//
-// impl Message for CharacterTransform3d {
-//     const CHANNEL: ChannelIdStatic = ChannelIdStatic {
-//         id: pkg_namespace!("CharacterTransform3d"),
-//         locality: Locality::Remote,
-//     };
-// }
 
 #[derive(Message, Serialize, Deserialize)]
 #[locality("Remote")]
@@ -77,36 +62,40 @@ impl PluginEntry for ClientState {
         let system_desc = SystemDescriptor::new(Stage::Update)
             .subscribe::<InputEvent>() // Subscribe to input events
             .subscribe::<FrameTime>()
-            // .query::<Player>(Access::Read) // Just an experiment.
-            .query::<Transform>(Access::Read) // Subscribe to frame time for delta time
-            .query::<Speed>(Access::Read);
+            .query::<PlayerFlag>(Access::Read) // Just an experiment.
+            .query::<Transform>(Access::Write); // Subscribe to frame time for delta time
+                                                // .query::<Speed>(Access::Read);
         sched.add_system(ClientState::update, system_desc); // Add the system to the schedule
 
         // Add the transform component to the cube mesh
         let character = io.create_entity();
         // Add the transform component to the cube mesh
         io.add_component(character, Transform::default());
-        io.add_component(character, Scale::default());
+        // io.add_component(character, Scale::default());
         io.add_component(character, PlayerFlag::default());
-        io.add_component(character, Speed(10.));
-
-        Self::default() // This works cuz default is baller
+        // io.add_component(character, Speed(10.));
+        Self {
+            local_trans: Transform::identity(),
+            ..Default::default()
+        }
+        // Self::default() // This works cuz default is baller
     }
 }
 
 impl ClientState {
     // Make it so that the client state is added as a system to the schedule
-    fn update(&mut self, io: &mut EngineIo, query: &mut QueryResult) {
+    fn update(&mut self, io: &mut EngineIo, _query: &mut QueryResult) {
         self.input.handle_input_events(io);
         // TODO: WASD translates to changing the transform
         // TODO: Send transform as message.
         let frame_time = io.inbox_first::<FrameTime>().unwrap(); // Get frame time or bust.
-                                                                 // EntityID for character.
-        let character_entity = query.iter().next().unwrap();
+
+        // EntityID for character.
+        // let character_entity = query.iter().next().unwrap();
         // Every frame the input helper is updated. So we should be good to just do wasd to
         // transform changing.
-        let speed = query.read::<Speed>(character_entity);
-        let mut local_transform = query.read::<Transform>(character_entity);
+        // let speed = query.read::<Speed>(character_entity);
+        // let mut local_transform = query.read::<Transform>(character_entity);
         let mut move_vector = Vec3::ZERO;
         const FORWARD: Vec3 = Vec3::new(1., 0., 0.);
         const BACKWARD: Vec3 = Vec3::new(-1., 0., 0.);
@@ -137,10 +126,16 @@ impl ClientState {
         // by making it so that instead of modifying a local transform and sending that, we can
         // instead send our move vector as a message to the server. That would probably make better
         // use of the sync component as well.
-        let distance_moved = move_vector.normalize() * frame_time.delta * speed.0;
-        local_transform.pos += distance_moved;
-        // Now we send our position over to the server
-        io.send(&RemoteTrans(local_transform))
+        log!("ClientState: {:?}", self);
+        if move_vector != Vec3::ZERO {
+            let distance_moved = move_vector.normalize() * frame_time.delta * 10.;
+            // log!("delta time: {:?}", frame_time.delta);
+            // log!("Move vector: {:?}", distance_moved);
+            self.local_trans.pos += distance_moved;
+            // log!("distance moved in client: {:?}", self.local_trans.pos);
+            // Now we send our position over to the server
+            io.send(&RemoteTrans(self.local_trans))
+        }
     }
 }
 
@@ -155,7 +150,7 @@ impl PluginEntry for ServerState {
         );
         io.add_component(cube_entity, Synchronized);
         io.add_component(cube_entity, PlayerFlag);
-
+        io.add_component(cube_entity, Transform::default());
         // Make it so our server update receives the Transform and updates stuff with the character
         // and transform component.
         let descriptor = SystemDescriptor::new(Stage::Update)
@@ -164,13 +159,13 @@ impl PluginEntry for ServerState {
             .query::<Transform>(Access::Write);
 
         sched.add_system(Self::update, descriptor);
-        log!("Hello, server!");
         Self
     }
 }
 impl ServerState {
     fn update(&mut self, io: &mut EngineIo, query: &mut QueryResult) {
         if let Some(RemoteTrans(trans)) = io.inbox_first() {
+            // log!("Transform serverside: {:?}", trans);
             // Update the objects' transforms.
             for item in query.iter() {
                 query.modify::<Transform>(item, |tf| {
